@@ -21,6 +21,6 @@ app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
 app.use(cors());
 
 // Server listening
-app.listen(PORT,  '192.168.1.106', () => {
+app.listen(PORT, () => {
     console.log(`Listening on port no ${PORT}`);
 });
