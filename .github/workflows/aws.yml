@@ -12,6 +12,11 @@ jobs:
     steps:
       - name: Check out the code
         uses: actions/checkout@v3
+        
+      - name: Debug Environment Variables
+        run: |
+          echo "AWS_ACCOUNT_ID: $AWS_ACCOUNT_ID"
+          echo "AWS_REGION: $AWS_REGION"
 
       - name: Configure AWS Credentials
         env:
