@@ -57,7 +57,7 @@ jobs:
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1  # Use the latest stable version
         with:
-          task-definition: ticker-backend-task:1  # Specify the task definition name and revision correctly
+          task-definition: ticker-backend-task  # Specify the task definition name and revision correctly
           container-name: ${{ secrets.CONTAINER_NAME }}  # Ensure this matches your ECS container name
           image: ${{ steps.build-image.outputs.image }} 
 
