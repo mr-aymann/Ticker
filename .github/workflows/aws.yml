@@ -55,11 +55,11 @@ jobs:
             
       - name: Fill in the new image ID in the Amazon ECS task definition
         id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@c804dfbdd57f713b6c079302a4c01db7017a36fc
+        uses: aws-actions/amazon-ecs-render-task-definition@v1  # Use the latest stable version
         with:
-          task-definition: ticker-backend-task 
-          container-name: ${{ secrets.CONTAINER_NAME }}        # This should match your ECS container name
-          image: ${{ steps.build-image.outputs.image }}   
+          task-definition: ticker-backend-task:1  # Specify the task definition name and revision correctly
+          container-name: ${{ secrets.CONTAINER_NAME }}  # Ensure this matches your ECS container name
+          image: ${{ steps.build-image.outputs.image }} 
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@df9643053eda01f169e64a0e60233aacca83799a
