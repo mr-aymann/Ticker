@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check out the code
-      uses: actions/checkout@v3
+      - name: Check out the code
+        uses: actions/checkout@v3
 
-    - name: Configure AWS Credentials
+      - name: Configure AWS Credentials
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -27,70 +27,66 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
-          aws ecr get-login-password --region "$AWS_REGION" 
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 
-       
+      - name: Build the Docker image
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY"
+          IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
+          docker build -t "$IMAGE_URI:$IMAGE_TAG" .
+          docker tag "$IMAGE_URI:$IMAGE_TAG" "$IMAGE_URI:latest"
 
-    - name: Build the Docker image
-      env:
-        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-        AWS_REGION: ${{ secrets.AWS_REGION }}
-        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      run: |
-        IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY"
-        IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
-        docker build -t $IMAGE_URI:$IMAGE_TAG .
-        docker tag $IMAGE_URI:$IMAGE_TAG $IMAGE_URI:latest
+      - name: Push Docker image to ECR
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY"
+          IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
+          docker push "$IMAGE_URI:$IMAGE_TAG"
+          docker push "$IMAGE_URI:latest"
 
-    - name: Push Docker image to ECR
-      env:
-        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-        AWS_REGION: ${{ secrets.AWS_REGION }}
-        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      run: |
-        IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY"
-        IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
-        docker push $IMAGE_URI:$IMAGE_TAG
-        docker push $IMAGE_URI:latest
+      - name: Update ECS Task Definition
+        id: update_task
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY"
+          IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
+          # Get the existing task definition
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition "$ECS_TASK_DEFINITION" --region "$AWS_REGION")
+          
+          # Create a new revision of the task definition with the new image URI
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMG "$IMAGE_URI:$IMAGE_TAG" '.taskDefinition.containerDefinitions[0].image = $IMG')
+          
+          # Register the updated task definition
+          NEW_REVISION=$(echo "$NEW_TASK_DEF" | jq '.taskDefinition | del(.status, .requiresAttributes, .revision, .registeredAt, .registeredBy, .compatibilities)' | aws ecs register-task-definition --cli-input-json file:///dev/stdin --region "$AWS_REGION")
+          # Output the new revision number
+          echo "New revision registered: $NEW_REVISION"
+          echo "revision=${NEW_REVISION}" >> $GITHUB_ENV
 
-    - name: Update ECS Task Definition
-      id: update_task
-      env:
-        AWS_REGION: ${{ secrets.AWS_REGION }}
-        ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
-        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      run: |
-        IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY"
-        IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)
+      - name: Deploy to ECS
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+          ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
+        run: |
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "${ECS_TASK_DEFINITION}:${{ steps.update_task.outputs.revision }}" --force-new-deployment --region "$AWS_REGION"
 
-        # Get the existing task definition
-        TASK_DEF=$(aws ecs describe-task-definition --task-definition $ECS_TASK_DEFINITION --region $AWS_REGION)
-        
-        # Create a new revision of the task definition with the new image URI
-        NEW_TASK_DEF=$(echo $TASK_DEF | jq --arg IMG "$IMAGE_URI:$IMAGE_TAG" '.taskDefinition.containerDefinitions[0].image = $IMG')
-        
-        # Register the updated task definition
-        NEW_REVISION=$(echo $NEW_TASK_DEF | jq '.taskDefinition | del(.status, .requiresAttributes, .revision, .registeredAt, .registeredBy, .compatibilities)' | aws ecs register-task-definition --cli-input-json file:///dev/stdin --region $AWS_REGION)
-
-        # Output the new revision number
-        echo "New revision registered: $NEW_REVISION"
-        echo "revision=${NEW_REVISION}" >> $GITHUB_ENV
-
-    - name: Deploy to ECS
-      env:
-        AWS_REGION: ${{ secrets.AWS_REGION }}
-        ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
-        ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
-        ECS_TASK_DEFINITION: ${{ secrets.ECS_TASK_DEFINITION }}
-      run: |
-        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --task-definition "${ECS_TASK_DEFINITION}:$NEW_REVISION" --force-new-deployment --region $AWS_REGION
-
-    - name: Log Deployment Details
-      env:
-        AWS_REGION: ${{ secrets.AWS_REGION }}
-        ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
-        ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
-      run: |
-        echo "Deployment complete. Logging details..."
-        aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_SERVICE --region $AWS_REGION | jq '.services[] | {serviceName, status, runningCount, desiredCount, taskDefinition}'
+      - name: Log Deployment Details
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+        run: |
+          echo "Deployment complete. Logging details..."
+          aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --region "$AWS_REGION" | jq '.services[] | {serviceName, status, runningCount, desiredCount, taskDefinition}'
