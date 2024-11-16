@@ -19,15 +19,22 @@ jobs:
         with:
           node-version: '18'
 
+      # Install Dependencies inside the backend directory
       - name: Install Dependencies
         run: npm install
+        working-directory: ./backend
 
+      # Build Application inside the backend directory
       - name: Build Application
         run: npm run build
+        working-directory: ./backend
 
+      # Zip the backend folder as the deployment package
       - name: Zip Application
-        run: zip -r app.zip .
+        run: zip -r deploy.zip . -x "*.git*" -x "node_modules/*"
+        working-directory: ./backend
 
+      # Configure AWS Credentials for deployment
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
@@ -35,17 +42,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Generate deployment package
-        run: zip -r deploy.zip . -x '*.git*'
-
+      # Deploy to Elastic Beanstalk
       - name: Deploy to EB
         uses: einaregilsson/beanstalk-deploy@v22
         with:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: Ticker-Backend
-          environment_name: Ticker-Backend-env
-          version_label: 12345
+          application_name: ${{ secrets.EB_APP_NAME }} # Set this as a GitHub secret
+          environment_name: ${{ secrets.EB_ENV_NAME }} # Set this as a GitHub secret
+          version_label: ${{ github.sha }} # Use commit SHA for versioning
           region: ${{ secrets.AWS_REGION }}
-          deployment_package: deploy.zip
-      
+          deployment_package: ./backend/deploy.zip
