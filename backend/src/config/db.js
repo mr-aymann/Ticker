@@ -14,7 +14,7 @@ const config = {
     connectionTimeoutMillis: 2000,
     ssl: {
         rejectUnauthorized: false, // Set to true for production with valid certificates
-        ca: fs.readFileSync(process.env.CA_CERT_PATH).toString(), // Use the CA certificate file
+        ca: process.env.CA_CERT_PATH
     },
 };
 
