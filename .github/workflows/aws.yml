@@ -1,31 +1,51 @@
-name: CICD
+name: Deploy to Elastic Beanstalk
 
 on:
   push:
     branches:
       - main
+      - master
 
 jobs:
-  build-and-deploy:
-    runs-on: [ ubuntu-latest ]
+  deploy:
+    runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: '18'
+
       - name: Install Dependencies
         run: npm install
-      - name: Genrate Deployment Package
-        run: zip -r nodejs-app-build.zip .
-      - name: Deploy to EB
-        uses: einaregilsson/beanstalk-deploy@v21
+
+      - name: Build Application
+        run: npm run build
+
+      - name: Zip Application
+        run: zip -r app.zip .
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
         with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Generate deployment package
+        run: zip -r deploy.zip . -x '*.git*'
+
+      - name: Deploy to EB
+        uses: einaregilsson/beanstalk-deploy@v22
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: 'Ticker-Backend'
-          environment_name: 'Ticker-Backend-env'
-          version_label: ${{ github.sha }}
-          region: us-east-1
-          deployment_package: Ticker-Backend-build.zip
+          application_name: Ticker-Backend
+          environment_name: Ticker-Backend-env
+          version_label: 12345
+          region: ${{ secrets.AWS_REGION }}
+          deployment_package: deploy.zip
+      
