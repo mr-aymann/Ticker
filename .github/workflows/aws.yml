@@ -24,11 +24,6 @@ jobs:
         run: npm install
         working-directory: ./backend
 
-      # Build Application inside the backend directory
-      - name: Build Application
-        run: npm run build
-        working-directory: ./backend
-
       # Zip the backend folder as the deployment package
       - name: Zip Application
         run: zip -r deploy.zip . -x "*.git*" -x "node_modules/*"
