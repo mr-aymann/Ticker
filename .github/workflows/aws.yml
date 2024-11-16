@@ -42,8 +42,8 @@ jobs:
         with:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: Ticker-Backend  # Set this as a GitHub secret
-          environment_name: Ticker-Backend-env # Set this as a GitHub secret
+          application_name: Ticker_api  # Set this as a GitHub secret
+          environment_name: Tickerapi-env  # Set this as a GitHub secret
           version_label: ${{ github.sha }} # Use commit SHA for versioning
           region: ${{ secrets.AWS_REGION }}
           deployment_package: ./backend/deploy.zip
